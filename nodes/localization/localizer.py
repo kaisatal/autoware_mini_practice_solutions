@@ -10,6 +10,22 @@ from pyproj import CRS, Transformer, Proj
 from novatel_oem7_msgs.msg import INSPVA
 from geometry_msgs.msg import PoseStamped, TwistStamped, Quaternion, TransformStamped
 
+# convert azimuth to yaw angle
+def convert_azimuth_to_yaw(azimuth):
+    """
+    Converts azimuth to yaw. Azimuth is CW angle from the north. Yaw is CCW angle from the East.
+    :param azimuth: azimuth in radians
+    :return: yaw in radians
+    """
+    yaw = -azimuth + math.pi/2
+    # Clamp within 0 to 2 pi
+    if yaw > 2 * math.pi:
+        yaw = yaw - 2 * math.pi
+    elif yaw < 0:
+        yaw += 2 * math.pi
+    
+    return yaw
+
 class Localizer:
     def __init__(self):
 
@@ -43,25 +59,10 @@ class Localizer:
 
         # calculate azimuth correction
         azimuth_correction = self.utm_projection.get_factors(msg.longitude, msg.latitude).meridian_convergence
-        
-        # convert azimuth to yaw angle
-        def convert_azimuth_to_yaw(azimuth):
-            """
-            Converts azimuth to yaw. Azimuth is CW angle from the north. Yaw is CCW angle from the East.
-            :param azimuth: azimuth in radians
-            :return: yaw in radians
-            """
-            yaw = -azimuth + math.pi/2
-            # Clamp within 0 to 2 pi
-            if yaw > 2 * math.pi:
-                yaw = yaw - 2 * math.pi
-            elif yaw < 0:
-                yaw += 2 * math.pi
-            
-            return yaw
 
-        corrected_azimuth = msg.azimuth - azimuth_correction
-        yaw = convert_azimuth_to_yaw(corrected_azimuth)
+        corrected_azimuth_deg = msg.azimuth - azimuth_correction
+        corrected_azimuth_rad = math.radians(corrected_azimuth_deg)
+        yaw = convert_azimuth_to_yaw(corrected_azimuth_rad)
 
         # Convert yaw to quaternion
         x, y, z, w = quaternion_from_euler(0, 0, yaw)
@@ -83,6 +84,21 @@ class Localizer:
         current_velocity_msg.header.frame_id = 'base_link'
         current_velocity_msg.twist.linear.x = math.sqrt(msg.north_velocity**2 + msg.east_velocity**2)
         self.current_velocity_pub.publish(current_velocity_msg)
+
+        # create a transform message
+        t = TransformStamped()
+
+        # fill in the transform message - t
+        t.header.frame_id = "map"
+        t.child_frame_id = "base_link"
+        t.header.stamp = msg.header.stamp
+        t.transform.translation.x = current_pose_msg.pose.position.x
+        t.transform.translation.y = current_pose_msg.pose.position.y
+        t.transform.translation.z = current_pose_msg.pose.position.z
+        t.transform.rotation = current_pose_msg.pose.orientation
+
+        # publish transform
+        self.br.sendTransform(t)
 
     def run(self):
         rospy.spin()
