@@ -14,9 +14,9 @@ class Localizer:
     def __init__(self):
 
         # Parameters
-        # self.undulation = rospy.get_param('undulation')
-        # utm_origin_lat = rospy.get_param('utm_origin_lat')
-        # utm_origin_lon = rospy.get_param('utm_origin_lon')
+        self.undulation = rospy.get_param('undulation')
+        utm_origin_lat = rospy.get_param('utm_origin_lat')
+        utm_origin_lon = rospy.get_param('utm_origin_lon')
 
         # Internal variables
         self.crs_wgs84 = CRS.from_epsg(4326)
