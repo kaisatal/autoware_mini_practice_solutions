@@ -69,13 +69,20 @@ class Localizer:
 
         # publish current pose
         current_pose_msg = PoseStamped()
-        current_pose_msg.header.stamp = rospy.Time.now()
+        current_pose_msg.header.stamp = msg.header.stamp
         current_pose_msg.header.frame_id = 'map'
         current_pose_msg.pose.position.x = utm_subtr_x
         current_pose_msg.pose.position.y = utm_subtr_y
         current_pose_msg.pose.position.z = msg.height - self.undulation
         current_pose_msg.pose.orientation = orientation
         self.current_pose_pub.publish(current_pose_msg)
+
+        # publish current velocity
+        current_velocity_msg = TwistStamped()
+        current_velocity_msg.header.stamp = msg.header.stamp
+        current_velocity_msg.header.frame_id = 'base_link'
+        current_velocity_msg.twist.linear.x = math.sqrt(msg.north_velocity**2 + msg.east_velocity**2)
+        self.current_velocity_pub.publish(current_velocity_msg)
 
     def run(self):
         rospy.spin()
