@@ -37,9 +37,45 @@ class Localizer:
 
     def transform_coordinates(self, msg):
         utm_x, utm_y = self.transformer.transform(msg.latitude, msg.longitude)
-        custom_x = utm_x - self.origin_x
-        custom_y = utm_y - self.origin_y
-        print(custom_x, custom_y)
+        utm_subtr_x = utm_x - self.origin_x
+        utm_subtr_y = utm_y - self.origin_y
+        print(utm_subtr_x, utm_subtr_y)
+
+        # calculate azimuth correction
+        azimuth_correction = self.utm_projection.get_factors(msg.longitude, msg.latitude).meridian_convergence
+        
+        # convert azimuth to yaw angle
+        def convert_azimuth_to_yaw(azimuth):
+            """
+            Converts azimuth to yaw. Azimuth is CW angle from the north. Yaw is CCW angle from the East.
+            :param azimuth: azimuth in radians
+            :return: yaw in radians
+            """
+            yaw = -azimuth + math.pi/2
+            # Clamp within 0 to 2 pi
+            if yaw > 2 * math.pi:
+                yaw = yaw - 2 * math.pi
+            elif yaw < 0:
+                yaw += 2 * math.pi
+            
+            return yaw
+
+        corrected_azimuth = msg.azimuth - azimuth_correction
+        yaw = convert_azimuth_to_yaw(corrected_azimuth)
+
+        # Convert yaw to quaternion
+        x, y, z, w = quaternion_from_euler(0, 0, yaw)
+        orientation = Quaternion(x, y, z, w)
+
+        # publish current pose
+        current_pose_msg = PoseStamped()
+        current_pose_msg.header.stamp = rospy.Time.now()
+        current_pose_msg.header.frame_id = 'map'
+        current_pose_msg.pose.position.x = utm_subtr_x
+        current_pose_msg.pose.position.y = utm_subtr_y
+        current_pose_msg.pose.position.z = msg.height - self.undulation
+        current_pose_msg.pose.orientation = orientation
+        self.current_pose_pub.publish(current_pose_msg)
 
     def run(self):
         rospy.spin()
