@@ -23,6 +23,10 @@ class Localizer:
         self.crs_utm = CRS.from_epsg(25835)
         self.utm_projection = Proj(self.crs_utm)
 
+        # create a coordinate transformer
+        self.transformer = Transformer.from_crs(self.crs_wgs84, self.crs_utm)
+        self.origin_x, self.origin_y = self.transformer.transform(utm_origin_lat, utm_origin_lon)
+
         # Subscribers
         rospy.Subscriber('/novatel/oem7/inspva', INSPVA, self.transform_coordinates)
 
@@ -32,7 +36,10 @@ class Localizer:
         self.br = TransformBroadcaster()
 
     def transform_coordinates(self, msg):
-        print(msg.latitude, msg.longitude)
+        utm_x, utm_y = self.transformer.transform(msg.latitude, msg.longitude)
+        custom_x = utm_x - self.origin_x
+        custom_y = utm_y - self.origin_y
+        print(custom_x, custom_y)
 
     def run(self):
         rospy.spin()
