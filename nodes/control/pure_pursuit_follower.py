@@ -8,6 +8,7 @@ from shapely.geometry import LineString, Point
 from shapely import prepare, distance
 from tf.transformations import euler_from_quaternion
 import numpy as np
+from scipy.interpolate import interp1d
 
 class PurePursuitFollower:
     def __init__(self):
@@ -16,6 +17,7 @@ class PurePursuitFollower:
         self.path_linestring = None
         self.lookahead_distance = rospy.get_param("~lookahead_distance")
         self.wheel_base = rospy.get_param("/vehicle/wheel_base")
+        self.distance_to_velocity_interpolator = None
 
         # Publishers
         self.vehicle_cmd_pub = rospy.Publisher('/control/vehicle_cmd', VehicleCmd, queue_size=10)
@@ -31,6 +33,17 @@ class PurePursuitFollower:
         prepare(path_linestring)
         self.path_linestring = LineString(path_linestring)
 
+        # Create a distance-to-velocity interpolator for the path
+        # collect waypoint x and y coordinates
+        waypoints_xy = np.array([(w.position.x, w.position.y) for w in msg.waypoints])
+        # Calculate distances between points
+        distances = np.cumsum(np.sqrt(np.sum(np.diff(waypoints_xy, axis=0)**2, axis=1)))
+        # add 0 distance in the beginning
+        distances = np.insert(distances, 0, 0)
+        # Extract velocity values at waypoints
+        velocities = np.array([w.speed for w in msg.waypoints])
+        self.distance_to_velocity_interpolator = interp1d(distances, velocities, kind='linear')
+
     def current_pose_callback(self, msg):
         #print(f"x: {msg.pose.position.x}, y: {msg.pose.position.y}")
 
@@ -43,7 +56,7 @@ class PurePursuitFollower:
         d_ego_from_path_start = 0
         if self.path_linestring is not None:
             d_ego_from_path_start = self.path_linestring.project(current_pose)
-            print(d_ego_from_path_start)
+            #print(d_ego_from_path_start)
         
         _, _, heading = euler_from_quaternion([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w])
         
@@ -53,8 +66,12 @@ class PurePursuitFollower:
         ld = np.sqrt((lookahead_point.x - current_pose.x)**2 + (lookahead_point.y - current_pose.y)**2)
         steering_angle = np.arctan(2 * self.wheel_base * np.sin(lookahead_heading - heading) / ld)
 
+        velocity = 0
+        if self.distance_to_velocity_interpolator is not None:
+            velocity = self.distance_to_velocity_interpolator(d_ego_from_path_start)
+
         vehicle_cmd.ctrl_cmd.steering_angle = steering_angle
-        vehicle_cmd.ctrl_cmd.linear_velocity = 10.0
+        vehicle_cmd.ctrl_cmd.linear_velocity = velocity
         self.vehicle_cmd_pub.publish(vehicle_cmd)
 
     def run(self):
