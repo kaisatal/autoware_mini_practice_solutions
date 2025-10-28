@@ -11,7 +11,7 @@
 
     <group ns="planning">
         <!-- Global planner -->
-        <node pkg="autoware_mini_practice_solutions" type="lanelet2_global_planner.py" name="global_planner" output="screen" required="true" >
+        <node pkg="autoware_mini_practice_solutions" type="lanelet2_global_planner.py" name="lanelet2_global_planner" output="screen" required="true" >
             <param name="lanelet2_map_path"  value="$(find autoware_mini)/data/maps/$(arg lanelet2_map_name)" />
             <param name="speed_limit"  value="$(arg speed_limit)" />
         </node>

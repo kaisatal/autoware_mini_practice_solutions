@@ -11,6 +11,9 @@ from lanelet2.geometry import findNearest
 
 from geometry_msgs.msg import PoseStamped
 
+from autoware_mini.msg import Path
+from autoware_mini.msg import Waypoint
+
 def load_lanelet2_map(lanelet2_map_path):
     """
     Load a lanelet2 map from a file and return it
@@ -38,11 +41,12 @@ def load_lanelet2_map(lanelet2_map_path):
 
     return lanelet2_map
 
+
 class GlobalPlanner:
     def __init__(self):
 
         # Parameters
-        self.lanelet2_map = load_lanelet2_map('/home/linuxuser/autoware_mini_ws/src/autoware_mini/data/maps/tartu_demo.osm')
+        self.lanelet2_map = load_lanelet2_map(rospy.get_param("~lanelet2_map_path"))
         # traffic rules
         traffic_rules = lanelet2.traffic_rules.create(lanelet2.traffic_rules.Locations.Germany, 
                                                            lanelet2.traffic_rules.Participants.VehicleTaxi)
@@ -50,6 +54,13 @@ class GlobalPlanner:
         self.graph = lanelet2.routing.RoutingGraph(self.lanelet2_map, traffic_rules)
         self.current_location = None
         self.goal_point = None
+        self.speed_limit = rospy.get_param("~speed_limit")
+        self.output_frame = rospy.get_param("~output_frame")
+
+        rospy.loginfo(f"Speed limit: {self.speed_limit} km/h")
+
+        # Publishers
+        self.waypoints_pub = rospy.Publisher('planning/global_path', Path, queue_size=10, latch=True)
 
         # Subscribers
         rospy.Subscriber('/move_base_simple/goal', PoseStamped, self.goal_callback, queue_size=1)
@@ -64,7 +75,7 @@ class GlobalPlanner:
         if self.goal_point is None: # Not added yet
             return
         goal_lanelet = findNearest(self.lanelet2_map.laneletLayer, self.goal_point, 1)[0][1]
-        
+
         # find routing graph
         route = self.graph.getRoute(start_lanelet, goal_lanelet, 0, True)
 
@@ -86,6 +97,34 @@ class GlobalPlanner:
                       msg.pose.orientation.w, msg.header.frame_id)
         
         self.goal_point = BasicPoint2d(msg.pose.position.x, msg.pose.position.y)
+    
+
+    def convert_lanelet_sequence_to_waypoints(self, lanelet_sequence):
+        for lanelet in lanelet_sequence:
+            # code to check if lanelet has attribute speed_ref
+            if 'speed_ref' in lanelet.attributes:
+                speed_km_h = float(lanelet.attributes['speed_ref'])
+                speed_m_s = speed_km_h / 3.6
+            else:
+                speed_m_s = self.speed_limit / 3.6
+            
+            waypoints = []
+            
+            for point in lanelet.centerline:
+                # create Waypoint (from autoware_mini.msgs import Waypoint) and get the coordinates from lanelet.centerline points
+                waypoint = Waypoint()
+                waypoint.position.x = point.x
+                waypoint.position.y = point.y
+                waypoint.position.z = point.z
+                waypoint.speed = speed_m_s
+
+                waypoints.append(waypoint)
+
+            path = Path()        
+            path.header.frame_id = self.output_frame
+            path.header.stamp = rospy.Time.now()
+            path.waypoints = waypoints
+            self.waypoints_pub.publish(path)
         
     
     def run(self):
