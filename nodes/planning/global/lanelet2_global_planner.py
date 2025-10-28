@@ -40,13 +40,43 @@ def load_lanelet2_map(lanelet2_map_path):
 
 class GlobalPlanner:
     def __init__(self):
-        map = load_lanelet2_map('/home/linuxuser/autoware_mini_ws/src/autoware_mini/data/maps/tartu_demo.osm')
+
+        # Parameters
+        self.lanelet2_map = load_lanelet2_map('/home/linuxuser/autoware_mini_ws/src/autoware_mini/data/maps/tartu_demo.osm')
+        # traffic rules
+        traffic_rules = lanelet2.traffic_rules.create(lanelet2.traffic_rules.Locations.Germany, 
+                                                           lanelet2.traffic_rules.Participants.VehicleTaxi)
+        # routing graph
+        self.graph = lanelet2.routing.RoutingGraph(self.lanelet2_map, traffic_rules)
+        self.current_location = None
+        self.goal_point = None
 
         # Subscribers
         rospy.Subscriber('/move_base_simple/goal', PoseStamped, self.goal_callback, queue_size=1)
+        rospy.Subscriber('/localization/current_pose', PoseStamped, self.current_pose_callback, queue_size=1)
 
-    def current_position_callback(self, msg):
-        pass
+    def current_pose_callback(self, msg):
+        self.current_location = BasicPoint2d(msg.pose.position.x, msg.pose.position.y)
+
+        # get start and end lanelets
+        start_lanelet = findNearest(self.lanelet2_map.laneletLayer, self.current_location, 1)[0][1]
+
+        if self.goal_point is None: # Not added yet
+            return
+        goal_lanelet = findNearest(self.lanelet2_map.laneletLayer, self.goal_point, 1)[0][1]
+        
+        # find routing graph
+        route = self.graph.getRoute(start_lanelet, goal_lanelet, 0, True)
+
+        if route is None:
+            rospy.logwarn("No route found for goal point!")
+            return None
+
+        # find shortest path
+        path = route.shortestPath()
+        # This returns LaneletSequence to a point where a lane change would be necessary to continue
+        path_no_lane_change = path.getRemainingLane(start_lanelet)
+        print(f"path_no_lane_change: {path_no_lane_change}")
 
     def goal_callback(self, msg):
         # loginfo message about receiving the goal point
@@ -54,6 +84,9 @@ class GlobalPlanner:
                       msg.pose.position.x, msg.pose.position.y, msg.pose.position.z, 
                       msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, 
                       msg.pose.orientation.w, msg.header.frame_id)
+        
+        self.goal_point = BasicPoint2d(msg.pose.position.x, msg.pose.position.y)
+        
     
     def run(self):
         rospy.spin()
