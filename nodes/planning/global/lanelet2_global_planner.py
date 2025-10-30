@@ -47,20 +47,20 @@ class GlobalPlanner:
 
         # Parameters
         self.lanelet2_map = load_lanelet2_map(rospy.get_param("~lanelet2_map_path"))
+        print(f"self.lanelet2_map: {self.lanelet2_map}")
         # traffic rules
         traffic_rules = lanelet2.traffic_rules.create(lanelet2.traffic_rules.Locations.Germany, 
                                                            lanelet2.traffic_rules.Participants.VehicleTaxi)
         # routing graph
         self.graph = lanelet2.routing.RoutingGraph(self.lanelet2_map, traffic_rules)
+        
         self.current_location = None
         self.goal_point = None
-        self.speed_limit = rospy.get_param("~speed_limit")
-        self.output_frame = rospy.get_param("~output_frame")
-
-        rospy.loginfo(f"Speed limit: {self.speed_limit} km/h")
+        self.speed_limit = rospy.get_param("~speed_limit") # from .launch file
+        self.output_frame = rospy.get_param("/planning/lanelet2_global_planner/output_frame") # from .yaml file
 
         # Publishers
-        self.waypoints_pub = rospy.Publisher('planning/global_path', Path, queue_size=10, latch=True)
+        self.waypoints_pub = rospy.Publisher('/planning/global_path', Path, queue_size=10, latch=True)
 
         # Subscribers
         rospy.Subscriber('/move_base_simple/goal', PoseStamped, self.goal_callback, queue_size=1)
@@ -72,7 +72,7 @@ class GlobalPlanner:
         # get start and end lanelets
         start_lanelet = findNearest(self.lanelet2_map.laneletLayer, self.current_location, 1)[0][1]
 
-        if self.goal_point is None: # Not added yet
+        if self.goal_point is None: # Goal point is not added yet
             return
         goal_lanelet = findNearest(self.lanelet2_map.laneletLayer, self.goal_point, 1)[0][1]
 
@@ -87,7 +87,10 @@ class GlobalPlanner:
         path = route.shortestPath()
         # This returns LaneletSequence to a point where a lane change would be necessary to continue
         path_no_lane_change = path.getRemainingLane(start_lanelet)
-        print(f"path_no_lane_change: {path_no_lane_change}")
+        #print(f"path_no_lane_change: {path_no_lane_change}")
+
+        waypoint_sequence = self.convert_lanelets_to_waypoints(path_no_lane_change)
+        self.publish_waypoints(waypoint_sequence)
 
     def goal_callback(self, msg):
         # loginfo message about receiving the goal point
@@ -99,32 +102,39 @@ class GlobalPlanner:
         self.goal_point = BasicPoint2d(msg.pose.position.x, msg.pose.position.y)
     
 
-    def convert_lanelet_sequence_to_waypoints(self, lanelet_sequence):
+    def convert_lanelets_to_waypoints(self, lanelet_sequence):
         for lanelet in lanelet_sequence:
             # code to check if lanelet has attribute speed_ref
             if 'speed_ref' in lanelet.attributes:
                 speed_km_h = float(lanelet.attributes['speed_ref'])
-                speed_m_s = speed_km_h / 3.6
+
+                if speed_km_h < self.speed_limit:
+                    speed_m_s = speed_km_h / 3.6
+                else:
+                    speed_m_s = self.speed_limit / 3.6
             else:
                 speed_m_s = self.speed_limit / 3.6
             
-            waypoints = []
-            
-            for point in lanelet.centerline:
-                # create Waypoint (from autoware_mini.msgs import Waypoint) and get the coordinates from lanelet.centerline points
+            waypoint_sequence = []
+
+            centerline_points = list(lanelet.centerline)
+            for point in centerline_points[:-1]:
                 waypoint = Waypoint()
                 waypoint.position.x = point.x
                 waypoint.position.y = point.y
                 waypoint.position.z = point.z
                 waypoint.speed = speed_m_s
 
-                waypoints.append(waypoint)
-
-            path = Path()        
-            path.header.frame_id = self.output_frame
-            path.header.stamp = rospy.Time.now()
-            path.waypoints = waypoints
-            self.waypoints_pub.publish(path)
+                waypoint_sequence.append(waypoint)
+            
+            return waypoint_sequence
+    
+    def publish_waypoints(self, waypoints):
+        path = Path()        
+        path.header.frame_id = self.output_frame
+        path.header.stamp = rospy.Time.now()
+        path.waypoints = waypoints
+        self.waypoints_pub.publish(path)
         
     
     def run(self):
