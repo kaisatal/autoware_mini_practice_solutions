@@ -56,8 +56,9 @@ class GlobalPlanner:
         
         self.current_location = None
         self.goal_point = None
-        self.speed_limit = rospy.get_param("~speed_limit") # from .launch file
-        self.output_frame = rospy.get_param("/planning/lanelet2_global_planner/output_frame") # from .yaml file
+        self.speed_limit = rospy.get_param("~speed_limit") # From .launch file
+        self.output_frame = rospy.get_param("/planning/lanelet2_global_planner/output_frame") # From .yaml file
+        self.distance_to_goal_limit = rospy.get_param("/planning/lanelet2_global_planner/distance_to_goal_limit")
 
         # Publishers
         self.waypoints_pub = rospy.Publisher('/planning/global_path', Path, queue_size=10, latch=True)
@@ -67,13 +68,18 @@ class GlobalPlanner:
         rospy.Subscriber('/localization/current_pose', PoseStamped, self.current_pose_callback, queue_size=1)
 
     def current_pose_callback(self, msg):
+        if self.goal_point is None: # Goal point is not added yet
+            return
+        
         self.current_location = BasicPoint2d(msg.pose.position.x, msg.pose.position.y)
+        
+        if lanelet2.geometry.distance(self.current_location, self.goal_point) < self.distance_to_goal_limit:
+            self.publish_waypoints([]) # Empty list of waypoints
+            rospy.loginfo("Goal reached.")
+            return
 
         # get start and end lanelets
         start_lanelet = findNearest(self.lanelet2_map.laneletLayer, self.current_location, 1)[0][1]
-
-        if self.goal_point is None: # Goal point is not added yet
-            return
         goal_lanelet = findNearest(self.lanelet2_map.laneletLayer, self.goal_point, 1)[0][1]
 
         # find routing graph
@@ -87,7 +93,6 @@ class GlobalPlanner:
         path = route.shortestPath()
         # This returns LaneletSequence to a point where a lane change would be necessary to continue
         path_no_lane_change = path.getRemainingLane(start_lanelet)
-        #print(f"path_no_lane_change: {path_no_lane_change}")
 
         waypoint_sequence = self.convert_lanelets_to_waypoints(path_no_lane_change)
         self.publish_waypoints(waypoint_sequence)
@@ -118,7 +123,7 @@ class GlobalPlanner:
             waypoint_sequence = []
 
             centerline_points = list(lanelet.centerline)
-            for point in centerline_points[:-1]:
+            for point in centerline_points[:-1]: # End point of a lanelet and the start point of the following lanelet overlap
                 waypoint = Waypoint()
                 waypoint.position.x = point.x
                 waypoint.position.y = point.y
