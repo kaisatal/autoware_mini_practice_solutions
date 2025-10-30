@@ -14,6 +14,8 @@ from geometry_msgs.msg import PoseStamped
 from autoware_mini.msg import Path
 from autoware_mini.msg import Waypoint
 
+import numpy as np
+
 def load_lanelet2_map(lanelet2_map_path):
     """
     Load a lanelet2 map from a file and return it
@@ -47,7 +49,6 @@ class GlobalPlanner:
 
         # Parameters
         self.lanelet2_map = load_lanelet2_map(rospy.get_param("~lanelet2_map_path"))
-        print(f"self.lanelet2_map: {self.lanelet2_map}")
         # traffic rules
         traffic_rules = lanelet2.traffic_rules.create(lanelet2.traffic_rules.Locations.Germany, 
                                                            lanelet2.traffic_rules.Participants.VehicleTaxi)
@@ -75,7 +76,6 @@ class GlobalPlanner:
         
         if lanelet2.geometry.distance(self.current_location, self.goal_point) < self.distance_to_goal_limit:
             self.publish_waypoints([]) # Empty list of waypoints
-            rospy.loginfo("Goal reached.")
             return
 
         # get start and end lanelets
@@ -108,7 +108,9 @@ class GlobalPlanner:
     
 
     def convert_lanelets_to_waypoints(self, lanelet_sequence):
-        for lanelet in lanelet_sequence:
+        waypoint_sequence = []
+
+        for lanelet_i, lanelet in enumerate(lanelet_sequence):
             # code to check if lanelet has attribute speed_ref
             if 'speed_ref' in lanelet.attributes:
                 speed_km_h = float(lanelet.attributes['speed_ref'])
@@ -119,11 +121,26 @@ class GlobalPlanner:
                     speed_m_s = self.speed_limit / 3.6
             else:
                 speed_m_s = self.speed_limit / 3.6
-            
-            waypoint_sequence = []
 
             centerline_points = list(lanelet.centerline)
-            for point in centerline_points[:-1]: # End point of a lanelet and the start point of the following lanelet overlap
+
+            if lanelet_i == len(lanelet_sequence) - 1: # Removing all points after goal point
+                end_index = len(centerline_points) - 1
+                smallest_distance = 1000
+
+                for i, point in enumerate(centerline_points):
+                    current_distance = np.sqrt((point.x - self.goal_point.x)**2 + (point.y - self.goal_point.y)**2)
+                    if current_distance < smallest_distance: # Searching for closest to goal point
+                        smallest_distance = current_distance
+                        end_index = i
+                
+                if end_index + 1 < len(centerline_points): # If not the last point
+                    centerline_points = centerline_points[:end_index + 1]
+            else: # Not the last lanelet
+                # End point of a lanelet and the start point of the following lanelet overlap
+                centerline_points = centerline_points[:-1]
+
+            for point in centerline_points:
                 waypoint = Waypoint()
                 waypoint.position.x = point.x
                 waypoint.position.y = point.y
@@ -132,7 +149,7 @@ class GlobalPlanner:
 
                 waypoint_sequence.append(waypoint)
             
-            return waypoint_sequence
+        return waypoint_sequence
     
     def publish_waypoints(self, waypoints):
         path = Path()        

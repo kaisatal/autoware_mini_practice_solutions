@@ -1,0 +1,12 @@
+pure_pursuit_follower.py:
+
+Added a state for when the car needs to be stopped (boolean self.needs_to_stop).
+- The state is entered when an empty path is received (and "Goal reached, path cleared." is logged only once).
+- In this state, the car's linear velocity is always 0.
+- The state is exited when the car has been still for 2 frames.
+
+
+lanelet2_global_planner.py:
+
+In convert_lanelets_to_waypoints(), the last lanelet is iterated through to get the point with minimal distance to goal point.
+All points after that point are removed from the lanelet, so last point of the lanelet is the one closest to goal point.

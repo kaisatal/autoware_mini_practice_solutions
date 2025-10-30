@@ -19,7 +19,7 @@ class PurePursuitFollower:
         self.wheel_base = rospy.get_param("/vehicle/wheel_base")
         self.distance_to_velocity_interpolator = None
 
-        self.needs_to_stop = False
+        self.needs_to_stop = False # Changes to True when goal has been reached
         self.prev_pose = None
 
         # Publishers
@@ -31,7 +31,9 @@ class PurePursuitFollower:
 
     def path_callback(self, msg):
         if len(msg.waypoints) < 2:
-            self.needs_to_stop = True
+            if self.needs_to_stop == False:
+                rospy.loginfo("Goal reached, path cleared.")
+                self.needs_to_stop = True
             return
         
         # convert waypoints to shapely linestring
@@ -72,22 +74,20 @@ class PurePursuitFollower:
         ld = np.sqrt((lookahead_point.x - current_pose.x)**2 + (lookahead_point.y - current_pose.y)**2)
         steering_angle = np.arctan(2 * self.wheel_base * np.sin(lookahead_heading - heading) / ld)
 
+        vehicle_cmd.ctrl_cmd.steering_angle = steering_angle
+
         if self.needs_to_stop == True:
             if current_pose == self.prev_pose: # Vehicle has stopped
                 self.needs_to_stop = False
             
-            vehicle_cmd.ctrl_cmd.steering_angle = 0
             vehicle_cmd.ctrl_cmd.linear_velocity = 0
-            self.vehicle_cmd_pub.publish(vehicle_cmd)
-
         else:
             velocity = 0
             if self.distance_to_velocity_interpolator is not None:
                 velocity = self.distance_to_velocity_interpolator(d_ego_from_path_start)
-
-            vehicle_cmd.ctrl_cmd.steering_angle = steering_angle
             vehicle_cmd.ctrl_cmd.linear_velocity = velocity
-            self.vehicle_cmd_pub.publish(vehicle_cmd)
+        
+        self.vehicle_cmd_pub.publish(vehicle_cmd)
         
         self.prev_pose = current_pose
 
