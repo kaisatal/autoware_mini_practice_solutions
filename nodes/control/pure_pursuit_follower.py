@@ -32,7 +32,6 @@ class PurePursuitFollower:
     def path_callback(self, msg):
         if len(msg.waypoints) < 2:
             if self.needs_to_stop == False:
-                rospy.loginfo("Goal reached, path cleared.")
                 self.needs_to_stop = True
             return
         

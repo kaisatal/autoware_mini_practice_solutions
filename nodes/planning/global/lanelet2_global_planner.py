@@ -57,9 +57,12 @@ class GlobalPlanner:
         
         self.current_location = None
         self.goal_point = None
+
         self.speed_limit = rospy.get_param("~speed_limit") # From .launch file
         self.output_frame = rospy.get_param("/planning/lanelet2_global_planner/output_frame") # From .yaml file
         self.distance_to_goal_limit = rospy.get_param("/planning/lanelet2_global_planner/distance_to_goal_limit")
+
+        self.stopping_car = True
 
         # Publishers
         self.waypoints_pub = rospy.Publisher('/planning/global_path', Path, queue_size=10, latch=True)
@@ -68,15 +71,25 @@ class GlobalPlanner:
         rospy.Subscriber('/move_base_simple/goal', PoseStamped, self.goal_callback, queue_size=1)
         rospy.Subscriber('/localization/current_pose', PoseStamped, self.current_pose_callback, queue_size=1)
 
-    def current_pose_callback(self, msg):
-        if self.goal_point is None: # Goal point is not added yet
-            return
-        
+    def current_pose_callback(self, msg):        
         self.current_location = BasicPoint2d(msg.pose.position.x, msg.pose.position.y)
+        
+        if self.goal_point is None: # Goal point is not added
+            return
         
         if lanelet2.geometry.distance(self.current_location, self.goal_point) < self.distance_to_goal_limit:
             self.publish_waypoints([]) # Empty list of waypoints
-            return
+            rospy.loginfo("Goal reached, path cleared.") 
+            self.goal_point = None
+
+    def goal_callback(self, msg):
+        # loginfo message about receiving the goal point
+        rospy.loginfo("%s - goal position (%f, %f, %f) orientation (%f, %f, %f, %f) in %s frame", rospy.get_name(), 
+                      msg.pose.position.x, msg.pose.position.y, msg.pose.position.z, 
+                      msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, 
+                      msg.pose.orientation.w, msg.header.frame_id)
+        
+        self.goal_point = BasicPoint2d(msg.pose.position.x, msg.pose.position.y)
 
         # get start and end lanelets
         start_lanelet = findNearest(self.lanelet2_map.laneletLayer, self.current_location, 1)[0][1]
@@ -96,15 +109,6 @@ class GlobalPlanner:
 
         waypoint_sequence = self.convert_lanelets_to_waypoints(path_no_lane_change)
         self.publish_waypoints(waypoint_sequence)
-
-    def goal_callback(self, msg):
-        # loginfo message about receiving the goal point
-        rospy.loginfo("%s - goal position (%f, %f, %f) orientation (%f, %f, %f, %f) in %s frame", rospy.get_name(), 
-                      msg.pose.position.x, msg.pose.position.y, msg.pose.position.z, 
-                      msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, 
-                      msg.pose.orientation.w, msg.header.frame_id)
-        
-        self.goal_point = BasicPoint2d(msg.pose.position.x, msg.pose.position.y)
     
 
     def convert_lanelets_to_waypoints(self, lanelet_sequence):
