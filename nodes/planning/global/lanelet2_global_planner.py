@@ -2,7 +2,6 @@
 
 import rospy
 
-# All these imports from lanelet2 library should be sufficient
 import lanelet2
 from lanelet2.io import Origin, load
 from lanelet2.projection import UtmProjector

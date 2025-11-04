@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 import rospy
+import numpy as np
 
 from sensor_msgs.msg import PointCloud2
 from ros_numpy import numpify, msgify
-import numpy as np
 from numpy.lib.recfunctions import structured_to_unstructured, unstructured_to_structured
 from sklearn.cluster import DBSCAN
 

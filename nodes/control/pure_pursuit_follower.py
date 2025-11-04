@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
 import rospy
+import numpy as np
 
 from autoware_mini.msg import Path, VehicleCmd
 from geometry_msgs.msg import PoseStamped
 from shapely.geometry import LineString, Point
 from shapely import prepare
 from tf.transformations import euler_from_quaternion
-import numpy as np
 from scipy.interpolate import interp1d
 
 class PurePursuitFollower:
