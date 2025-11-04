@@ -155,7 +155,6 @@ class GlobalPlanner:
         path.header.stamp = rospy.Time.now()
         path.waypoints = waypoints
         self.waypoints_pub.publish(path)
-        
     
     def run(self):
         rospy.spin()
