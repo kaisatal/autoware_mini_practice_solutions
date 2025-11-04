@@ -46,23 +46,17 @@ def load_lanelet2_map(lanelet2_map_path):
 
 class GlobalPlanner:
     def __init__(self):
-
-        # Parameters
-        self.lanelet2_map = load_lanelet2_map(rospy.get_param("~lanelet2_map_path"))
         # traffic rules
         traffic_rules = lanelet2.traffic_rules.create(lanelet2.traffic_rules.Locations.Germany, 
                                                            lanelet2.traffic_rules.Participants.VehicleTaxi)
-        # routing graph
+        # Parameters
+        self.lanelet2_map = load_lanelet2_map(rospy.get_param("~lanelet2_map_path"))
         self.graph = lanelet2.routing.RoutingGraph(self.lanelet2_map, traffic_rules)
-        
         self.current_location = None
         self.goal_point = None
-
         self.speed_limit = rospy.get_param("~speed_limit") # From .launch file
         self.output_frame = rospy.get_param("/planning/lanelet2_global_planner/output_frame") # From .yaml file
         self.distance_to_goal_limit = rospy.get_param("/planning/lanelet2_global_planner/distance_to_goal_limit")
-
-        self.stopping_car = True
 
         # Publishers
         self.waypoints_pub = rospy.Publisher('/planning/global_path', Path, queue_size=10, latch=True)
