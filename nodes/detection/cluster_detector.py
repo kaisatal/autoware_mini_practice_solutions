@@ -6,13 +6,11 @@ import numpy as np
 from shapely import MultiPoint
 from tf2_ros import TransformListener, Buffer, TransformException
 from numpy.lib.recfunctions import structured_to_unstructured
-from ros_numpy import numpify, msgify
+from ros_numpy import numpify
 
 from sensor_msgs.msg import PointCloud2
 from autoware_mini.msg import DetectedObjectArray, DetectedObject
 from std_msgs.msg import ColorRGBA, Header
-from geometry_msgs.msg import Point32
-
 
 BLUE80P = ColorRGBA(0.0, 0.0, 1.0, 0.8)
 
@@ -34,8 +32,8 @@ class ClusterDetector:
     def cluster_callback(self, msg):
         data = numpify(msg)
         points = structured_to_unstructured(data[['x', 'y', 'z', 'label']], dtype=np.float32)
-        print(f"points shape before transform: {points.shape}")
-        print(f"first row: {points[0]}")
+
+        labels = points[:, 3].astype(int)
 
         # fetch transform for target frame
         try:
@@ -52,9 +50,46 @@ class ClusterDetector:
         # transform points to target frame
         points = points.dot(tf_matrix.T)
 
-        print(f"tf_matrix: \n{tf_matrix}")
-        print(f"points shape after transform: {points.shape}")
-        print(f"first row: {points[0]}")
+        header = Header()
+        header.stamp = msg.header.stamp
+        header.frame_id = self.output_frame
+
+        object_array = DetectedObjectArray()
+        object_array.header = header
+
+        if len(labels) > 0:
+            for i in range(labels[-1] + 1):
+                # create mask
+                mask = (labels == i)
+                # select points for one object from an array using a mask
+                # rows are selected using a binary mask, and only the first 3 columns are selected: x, y, and z coordinates
+                points3d = points[mask,:3]
+                
+                if len(points3d) < self.min_cluster_size:
+                    continue
+                
+                object = DetectedObject()
+                object.id = i # Cluster label
+                object.label = "unknown"
+                object.color = BLUE80P
+                object.valid = True
+                object.position_reliable = True
+                object.velocity_reliable = False
+                object.acceleration_reliable = False
+
+                object.centroid.x = np.mean(points3d[:, 0])
+                object.centroid.y = np.mean(points3d[:, 1])
+                object.centroid.z = np.mean(points3d[:, 2])
+
+                # create convex hull
+                points_2d = MultiPoint(points[mask,:2])
+                hull = points_2d.convex_hull
+                convex_hull_points = [a for hull in [[x, y, object.centroid.z] for x, y in hull.exterior.coords] for a in hull]
+                object.convex_hull = convex_hull_points
+
+                object_array.objects.append(object)
+        
+        self.objects_pub.publish(object_array)
 
     def run(self):
         rospy.spin()
