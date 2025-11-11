@@ -72,7 +72,7 @@ class GlobalPlanner:
         
         if lanelet2.geometry.distance(self.current_location, self.goal_point) < self.distance_to_goal_limit:
             self.publish_waypoints([]) # Empty list of waypoints
-            rospy.loginfo("Goal reached, path cleared.")
+            rospy.loginfo("%s - Goal reached, path cleared.", rospy.get_name())
             self.goal_point = None
 
     def goal_callback(self, msg):
