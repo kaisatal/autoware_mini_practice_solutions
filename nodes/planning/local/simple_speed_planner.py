@@ -14,6 +14,8 @@ from sensor_msgs.msg import PointCloud2
 from geometry_msgs.msg import PoseStamped, TwistStamped, Vector3
 from autoware_mini.geometry import project_vector_to_heading, get_distance_between_two_points_2d
 
+from shapely.geometry import LineString
+
 
 class SpeedPlanner:
 
@@ -61,7 +63,48 @@ class SpeedPlanner:
                 current_position = self.current_position
                 current_speed = self.current_speed
 
-            pass
+            if self.current_position is None or self.current_speed is None:
+                return
+            
+            if len(collision_points) == 0 or local_path_msg.waypoints is None:
+                path = Path()
+                path.header = local_path_msg.header
+                self.local_path_pub.publish(path)
+                return
+            
+            local_path_coords = [(wp.position.x, wp.position.y) for wp in local_path_msg.waypoints]
+            local_path_linestring = LineString(local_path_coords)
+
+            collision_points_shapely = shapely.points(structured_to_unstructured(collision_points[['x', 'y', 'z']]))
+            collision_point_distances = np.array([local_path_linestring.project(collision_point_shapely) for collision_point_shapely in collision_points_shapely])
+
+            # Filtering out points that are behind the car
+            front_mask = collision_point_distances > 0
+            front_point_distances = collision_point_distances[front_mask]
+
+            closest_object_distance = min(front_point_distances)
+
+            target_velocities = np.sqrt(np.maximum(0, 2 * self.default_deceleration * front_point_distances))
+            
+            if len(target_velocities) == 0:
+                target_velocity = 0
+            else:
+                target_velocity = min(target_velocities)
+            
+            for i, wp in enumerate(local_path_msg.waypoints):
+                wp.speed = min(target_velocity, wp.speed)
+            
+            # Update the lane message with the calculated values
+            path = Path()
+            path.header = local_path_msg.header
+            path.waypoints = local_path_msg.waypoints
+            path.closest_object_distance = closest_object_distance # Distance to the collision point with lowest target velocity (also closest object for now)
+            path.closest_object_velocity = 0 # Velocity of the collision point with lowest target velocity (0)
+            path.is_blocked = True
+            path.stopping_point_distance = closest_object_distance # Stopping point distance can be set to the distance to the closest object for now
+            path.collision_point_category = 3 # Category of collision point with lowest target velocity
+            self.local_path_pub.publish(path)
+
 
         except Exception as e:
             rospy.logerr_throttle(10, "%s - Exception in callback: %s", rospy.get_name(), traceback.format_exc())
