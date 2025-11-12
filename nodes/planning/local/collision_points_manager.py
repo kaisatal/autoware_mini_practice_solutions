@@ -66,18 +66,18 @@ class CollisionPointsManager:
         prepare(buf_linestring)
         
         for obj in detected_objects:
-            # Extract (x, y) coordinates from the convex hull points (ignore z)
-            convex_hull = [(p.x, p.y) for p in obj.convex_hull.polygon.points]
+            coords = np.array(obj.convex_hull).reshape(-1, 3) # -1 means that the length is not known
+            convex_hull = [(x, y) for x, y, _ in coords] # Polygon expects tuples
             obj_polygon = Polygon(convex_hull)
 
-            # Only objects on the path are important
-            if buf_linestring.intersects(obj_polygon):
+            if buf_linestring.intersects(obj_polygon): # Only objects on the path are important
                 intersection_polygon = obj_polygon.intersection(buf_linestring)
                 intersection_points = shapely.get_coordinates(intersection_polygon)
-            
+
+                object_speed = np.hypot(obj.velocity.x, obj.velocity.y)
                 for x, y in intersection_points:
                     collision_points = np.append(collision_points, np.array([(x, y, obj.centroid.z, obj.velocity.x, obj.velocity.y, obj.velocity.z,
-                                                                          self.braking_safety_distance_obstacle, np.inf, 3 if obj.speed < self.stopped_speed_limit else 4)], dtype=DTYPE))
+                                                                          self.braking_safety_distance_obstacle, np.inf, 3 if object_speed < self.stopped_speed_limit else 4)], dtype=DTYPE))
         
         print(f"collision_points: {collision_points}")
         local_path_collision = msgify(PointCloud2, collision_points)
