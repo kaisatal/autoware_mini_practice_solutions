@@ -54,7 +54,7 @@ class CollisionPointsManager:
             detected_objects = self.detected_objects
         collision_points = np.array([], dtype=DTYPE)
 
-        if len(msg.waypoints) == 0 or len(detected_objects) == 0:
+        if len(msg.waypoints) == 0 or msg.waypoints is None or len(detected_objects) == 0:
             local_path_collision = PointCloud2()
             local_path_collision.header = msg.header
             self.local_path_collision_pub.publish(local_path_collision)
@@ -79,7 +79,7 @@ class CollisionPointsManager:
                     collision_points = np.append(collision_points, np.array([(x, y, obj.centroid.z, obj.velocity.x, obj.velocity.y, obj.velocity.z,
                                                                           self.braking_safety_distance_obstacle, np.inf, 3 if object_speed < self.stopped_speed_limit else 4)], dtype=DTYPE))
         
-        print(f"collision_points: {collision_points}")
+        #print(f"collision_points: {collision_points}")
         local_path_collision = msgify(PointCloud2, collision_points)
         local_path_collision.header = msg.header
         self.local_path_collision_pub.publish(local_path_collision)
