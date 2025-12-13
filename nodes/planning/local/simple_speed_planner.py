@@ -90,7 +90,7 @@ class SpeedPlanner:
                 collision_point_velocities = np.append(collision_point_velocities, projected_velocity)
 
                 actual_speed = math.sqrt(vector.x**2 + vector.y**2)
-                print(f"object velocity: {actual_speed}, transformed velocity: {projected_velocity}")
+                #print(f"object velocity: {actual_speed}, transformed velocity: {projected_velocity}")
 
             front_to_collision_points = collision_point_distances - self.distance_to_car_front
 
@@ -98,7 +98,7 @@ class SpeedPlanner:
             target_distances = self.braking_reaction_time * abs(collision_point_velocities)
 
             # All points in front of the vehicle are considered. The distance_to_stop buffer is added if there is room
-            distance_to_stop = collision_points[0][6] # 7th field of the message, 'braking_safety_distance_obstacle'
+            distance_to_stop = collision_points['distance_to_stop'][0] # Always the same value
             target_velocities = np.sqrt(np.maximum(0, collision_point_velocities ** 2 + 2 * self.default_deceleration * (front_to_collision_points - distance_to_stop - target_distances)))
             
             i_collision = np.argmin(target_velocities) # Index of smallest velocity
