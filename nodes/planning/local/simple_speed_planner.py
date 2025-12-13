@@ -63,12 +63,13 @@ class SpeedPlanner:
                 current_position = self.current_position
                 current_speed = self.current_speed
 
-            if self.current_position is None or self.current_speed is None:
+            if current_position is None or current_speed is None:
                 return
             
             if len(collision_points) == 0 or local_path_msg.waypoints is None:
                 path = Path()
                 path.header = local_path_msg.header
+                path.waypoints = local_path_msg.waypoints
                 self.local_path_pub.publish(path)
                 return
             
@@ -78,13 +79,9 @@ class SpeedPlanner:
             collision_points_shapely = shapely.points(structured_to_unstructured(collision_points[['x', 'y', 'z']]))
             collision_point_distances = np.array([local_path_linestring.project(collision_point_shapely) for collision_point_shapely in collision_points_shapely])
 
-            # Filtering out points that are behind the car
-            front_mask = collision_point_distances > 0
-            front_point_distances = collision_point_distances[front_mask]
+            closest_object_distance = min(collision_point_distances)
 
-            closest_object_distance = min(front_point_distances)
-
-            target_velocities = np.sqrt(np.maximum(0, 2 * self.default_deceleration * front_point_distances))
+            target_velocities = np.sqrt(np.maximum(0, 2 * self.default_deceleration * collision_point_distances))
             
             if len(target_velocities) == 0:
                 target_velocity = 0
