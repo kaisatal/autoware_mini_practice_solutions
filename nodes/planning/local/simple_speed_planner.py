@@ -66,7 +66,7 @@ class SpeedPlanner:
             if current_position is None or current_speed is None:
                 return
             
-            if len(collision_points) == 0 or local_path_msg.waypoints is None:
+            if len(collision_points) == 0:
                 path = Path()
                 path.header = local_path_msg.header
                 path.waypoints = local_path_msg.waypoints
@@ -79,29 +79,29 @@ class SpeedPlanner:
             collision_points_shapely = shapely.points(structured_to_unstructured(collision_points[['x', 'y', 'z']]))
             collision_point_distances = np.array([local_path_linestring.project(collision_point_shapely) for collision_point_shapely in collision_points_shapely])
             
-            collision_point_velocities = []
+            # Calculating collision point speeds
+            collision_point_velocities = np.array([])
             for i, distance in enumerate(collision_point_distances):
                 heading_angle = self.get_heading_at_distance(local_path_linestring, distance)
 
                 vector = Vector3(x = collision_points[i][3], y = collision_points[i][4], z = collision_points[i][5])
                 projected_velocity = project_vector_to_heading(heading_angle, vector)
 
-                collision_point_velocities.append(projected_velocity)
+                collision_point_velocities = np.append(collision_point_velocities, projected_velocity)
 
                 actual_speed = math.sqrt(vector.x**2 + vector.y**2)
                 print(f"object velocity: {actual_speed}, transformed velocity: {projected_velocity}")
 
             front_to_collision_points = collision_point_distances - self.distance_to_car_front
-            closest_object_distance = min(front_to_collision_points)
 
             # All points in front of the vehicle are considered. The distance_to_stop buffer is added if there is room
             distance_to_stop = collision_points[0][6] # 7th field of the message
-            target_velocities = np.sqrt(np.maximum(0, 2 * self.default_deceleration * (front_to_collision_points - distance_to_stop)))
+            target_velocities = np.sqrt(np.maximum(0, collision_point_velocities ** 2 + 2 * self.default_deceleration * (front_to_collision_points - distance_to_stop)))
             
-            if len(target_velocities) == 0:
-                target_velocity = 0
-            else:
-                target_velocity = min(target_velocities)
+            i_collision = np.argmin(target_velocities) # Index of smallest velocity
+            target_velocity = target_velocities[i_collision]
+            closest_object_distance = front_to_collision_points[i_collision]
+            stopping_point_distance = max(0, collision_point_distances[i_collision] - distance_to_stop)
             
             for i, wp in enumerate(local_path_msg.waypoints):
                 wp.speed = min(target_velocity, wp.speed)
@@ -110,10 +110,10 @@ class SpeedPlanner:
             path = Path()
             path.header = local_path_msg.header
             path.waypoints = local_path_msg.waypoints
-            path.closest_object_distance = closest_object_distance # Distance to the collision point with lowest target velocity (also closest object for now)
-            path.closest_object_velocity = 0 # Velocity of the collision point with lowest target velocity (0)
+            path.closest_object_distance = closest_object_distance # Distance to the collision point with lowest target velocity
+            path.closest_object_velocity = target_velocity # Velocity of the collision point with lowest target velocity
             path.is_blocked = True
-            path.stopping_point_distance = closest_object_distance # Stopping point distance can be set to the distance to the closest object for now
+            path.stopping_point_distance = stopping_point_distance
             path.collision_point_category = 3 # Category of collision point with lowest target velocity
             self.local_path_pub.publish(path)
 
