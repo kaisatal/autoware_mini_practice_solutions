@@ -78,6 +78,19 @@ class SpeedPlanner:
 
             collision_points_shapely = shapely.points(structured_to_unstructured(collision_points[['x', 'y', 'z']]))
             collision_point_distances = np.array([local_path_linestring.project(collision_point_shapely) for collision_point_shapely in collision_points_shapely])
+            
+            collision_point_velocities = []
+            for i, distance in enumerate(collision_point_distances):
+                heading_angle = self.get_heading_at_distance(local_path_linestring, distance)
+
+                vector = Vector3(x = collision_points[i][3], y = collision_points[i][4], z = collision_points[i][5])
+                projected_velocity = project_vector_to_heading(heading_angle, vector)
+
+                collision_point_velocities.append(projected_velocity)
+
+                actual_speed = math.sqrt(vector.x**2 + vector.y**2)
+                print(f"object velocity: {actual_speed}, transformed velocity: {projected_velocity}")
+
             front_to_collision_points = collision_point_distances - self.distance_to_car_front
             closest_object_distance = min(front_to_collision_points)
 
