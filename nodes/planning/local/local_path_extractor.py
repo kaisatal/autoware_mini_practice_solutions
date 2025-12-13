@@ -115,7 +115,7 @@ class LocalPathExtractor:
 
         # current position is projected at the end of the global path - goal reached
         if math.isclose(d_ego_from_path_start, global_path_linestring.length):
-            return None
+            return []
 
         d_to_local_path_end = d_ego_from_path_start + local_path_length
 
