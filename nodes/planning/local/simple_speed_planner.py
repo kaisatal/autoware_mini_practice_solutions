@@ -78,10 +78,12 @@ class SpeedPlanner:
 
             collision_points_shapely = shapely.points(structured_to_unstructured(collision_points[['x', 'y', 'z']]))
             collision_point_distances = np.array([local_path_linestring.project(collision_point_shapely) for collision_point_shapely in collision_points_shapely])
+            front_to_collision_points = collision_point_distances - self.distance_to_car_front
+            closest_object_distance = min(front_to_collision_points)
 
-            closest_object_distance = min(collision_point_distances)
-
-            target_velocities = np.sqrt(np.maximum(0, 2 * self.default_deceleration * collision_point_distances))
+            # All points in front of the vehicle are considered. The distance_to_stop buffer is added if there is room
+            distance_to_stop = collision_points[0][6] # 7th field of the message
+            target_velocities = np.sqrt(np.maximum(0, 2 * self.default_deceleration * (front_to_collision_points - distance_to_stop)))
             
             if len(target_velocities) == 0:
                 target_velocity = 0
