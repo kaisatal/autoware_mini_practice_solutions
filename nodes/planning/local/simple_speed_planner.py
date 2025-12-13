@@ -94,9 +94,12 @@ class SpeedPlanner:
 
             front_to_collision_points = collision_point_distances - self.distance_to_car_front
 
+            # The higher the speed, the greater the distance should be
+            target_distances = self.braking_reaction_time * abs(collision_point_velocities)
+
             # All points in front of the vehicle are considered. The distance_to_stop buffer is added if there is room
-            distance_to_stop = collision_points[0][6] # 7th field of the message
-            target_velocities = np.sqrt(np.maximum(0, collision_point_velocities ** 2 + 2 * self.default_deceleration * (front_to_collision_points - distance_to_stop)))
+            distance_to_stop = collision_points[0][6] # 7th field of the message, 'braking_safety_distance_obstacle'
+            target_velocities = np.sqrt(np.maximum(0, collision_point_velocities ** 2 + 2 * self.default_deceleration * (front_to_collision_points - distance_to_stop - target_distances)))
             
             i_collision = np.argmin(target_velocities) # Index of smallest velocity
             target_velocity = target_velocities[i_collision]
