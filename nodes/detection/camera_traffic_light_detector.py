@@ -137,6 +137,7 @@ class CameraTrafficLightDetector:
         tfl_status = TrafficLightResultArray()
         tfl_status.header.frame_id = camera_image_msg.header.frame_id
         tfl_status.header.stamp = camera_image_msg.header.stamp
+        tfl_status.results = []
         
         rois = []
         if len(stoplines_on_path) > 0:

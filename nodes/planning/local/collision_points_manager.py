@@ -84,7 +84,8 @@ class CollisionPointsManager:
             detected_objects = self.detected_objects
         collision_points = np.array([], dtype=DTYPE)
 
-        if len(msg.waypoints) == 0 or msg.waypoints is None or (len(detected_objects) == 0 and self.goal_waypoint is None):
+        # If either there is no path or no obstacles
+        if len(msg.waypoints) == 0 or msg.waypoints is None or (len(detected_objects) == 0 and self.goal_waypoint is None and len(self.traffic_lights) == 0):
             local_path_collision = PointCloud2()
             local_path_collision.header = msg.header
             self.local_path_collision_pub.publish(local_path_collision)
@@ -131,12 +132,13 @@ class CollisionPointsManager:
                 traffic_lights = self.traffic_lights
             
             for traffic_light in traffic_lights:
-                if buf_linestring.intersects(traffic_light):
-                    intersection_polygon = traffic_light.intersection(buf_linestring)
-                    intersection_points = shapely.get_coordinates(intersection_polygon)
+                if traffic_light.recognition_result_str == "red":
+                    if buf_linestring.intersects(traffic_light):
+                        intersection_polygon = traffic_light.intersection(buf_linestring)
+                        intersection_points = shapely.get_coordinates(intersection_polygon)
 
-                    for x, y in intersection_points:
-                        collision_points = np.append(collision_points, np.array([(x, y, 0, 0, 0, 0, self.braking_safety_distance_stopline, np.inf, 2)], dtype=DTYPE))
+                        for x, y in intersection_points:
+                            collision_points = np.append(collision_points, np.array([(x, y, 0, 0, 0, 0, self.braking_safety_distance_stopline, np.inf, 2)], dtype=DTYPE))
 
         #print(f"collision_points: {collision_points}")
         local_path_collision = msgify(PointCloud2, collision_points)
